@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Space Runner</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: radial-gradient(ellipse at center, #000010, #000);
+      font-family: Arial, sans-serif;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #score {
+      position: absolute;
+      top: 10px;
+      right: 20px;
+      color: white;
+      font-size: 24px;
+      font-family: monospace;
+      z-index: 2;
+    }
+
+    #credit {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      font-size: 16px;
+      font-family: monospace;
+      opacity: 0.6;
+      z-index: 2;
+    }
+
+    #message {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 32px;
+      font-family: monospace;
+      text-align: center;
+      display: none;
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="score">0</div>
+  <div id="credit">Created by Daniyal</div>
+  <div id="message">Game Over<br>Tap to Restart</div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+
+    let ninja = {
+      x: 100,
+      y: canvas.height - 150,
+      size: 50,
+      vy: 0,
+      gravity: 1.2,
+      jumpPower: -25, // increased jump power
+      isJumping: false,
+      rotation: 0
+    };
+
+    let obstacles = [];
+    let stars = [];
+    let score = 0;
+    let speed = 5;
+    let gameOver = false;
+    let message = document.getElementById('message');
+
+    function createStars() {
+      for (let i = 0; i < 100; i++) {
+        stars.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          r: Math.random() * 2,
+          alpha: Math.random()
+        });
+      }
+    }
+
+    function drawStars() {
+      stars.forEach(star => {
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
+        ctx.fill();
+        star.alpha += (Math.random() - 0.5) * 0.05;
+        star.alpha = Math.max(0.1, Math.min(1, star.alpha));
+      });
+    }
+
+    function drawNinja() {
+      ctx.save();
+      ctx.translate(ninja.x + ninja.size / 2, ninja.y + ninja.size / 2);
+      ctx.rotate(ninja.rotation);
+      ctx.fillStyle = 'white';
+      ctx.beginPath();
+      ctx.arc(0, 0, ninja.size / 2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawObstacles() {
+      obstacles.forEach(obs => {
+        ctx.save();
+        ctx.translate(obs.x + obs.size / 2, obs.y + obs.size / 2);
+        if (obs.roll) ctx.rotate(obs.angle);
+        ctx.fillStyle = 'yellow';
+        ctx.beginPath();
+        ctx.arc(0, 0, obs.size / 2, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      });
+    }
+
+    function update() {
+      if (gameOver) return;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawStars();
+
+      // Ninja movement
+      ninja.vy += ninja.gravity;
+      ninja.y += ninja.vy;
+      if (ninja.y > canvas.height - 150) {
+        ninja.y = canvas.height - 150;
+        ninja.vy = 0;
+        ninja.isJumping = false;
+        ninja.rotation = 0;
+      }
+      if (ninja.isJumping) ninja.rotation += 0.2;
+
+      drawNinja();
+
+      // Obstacles
+      obstacles.forEach(obs => {
+        obs.x -= speed;
+        if (obs.roll) obs.angle += 0.1;
+      });
+
+      obstacles = obstacles.filter(obs => obs.x + obs.size > 0);
+
+      if (score % Math.floor(60 + Math.random() * 50) === 0) {
+        let size = 40 + Math.random() * 30;
+        let roll = score > 500;
+        obstacles.push({
+          x: canvas.width + size,
+          y: canvas.height - 150,
+          size,
+          roll,
+          angle: 0
+        });
+      }
+
+      drawObstacles();
+
+      // Collision
+      obstacles.forEach(obs => {
+        let dx = (ninja.x + ninja.size / 2) - (obs.x + obs.size / 2);
+        let dy = (ninja.y + ninja.size / 2) - (obs.y + obs.size / 2);
+        let distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance < ninja.size / 2 + obs.size / 2) {
+          gameOver = true;
+          message.style.display = 'block';
+        }
+      });
+
+      // UFO event
+      if (score % 1000 === 0 && score !== 0 && !document.getElementById('ufo')) {
+        let ufo = document.createElement('div');
+        ufo.id = 'ufo';
+        ufo.style.position = 'absolute';
+        ufo.style.top = '100px';
+        ufo.style.left = '50%';
+        ufo.style.width = '80px';
+        ufo.style.height = '30px';
+        ufo.style.background = 'silver';
+        ufo.style.borderRadius = '50%';
+        ufo.style.boxShadow = '0 0 10px cyan';
+        document.body.appendChild(ufo);
+
+        setTimeout(() => {
+          let beam = document.createElement('div');
+          beam.style.position = 'absolute';
+          beam.style.top = '130px';
+          beam.style.left = 'calc(50% + 35px)';
+          beam.style.width = '10px';
+          beam.style.height = '80px';
+          beam.style.background = 'lime';
+          beam.style.boxShadow = '0 0 10px lime';
+          document.body.appendChild(beam);
+
+          setTimeout(() => {
+            beam.remove();
+            ufo.remove();
+          }, 1000);
+        }, 1000);
+      }
+
+      score++;
+      document.getElementById('score').innerText = score;
+
+      // Speed increase every 500 points
+      if (score % 500 === 0) speed += 0.15;
+
+      requestAnimationFrame(update);
+    }
+
+    window.addEventListener('keydown', () => {
+      if (!ninja.isJumping && !gameOver) {
+        ninja.vy = ninja.jumpPower;
+        ninja.isJumping = true;
+      } else if (gameOver) {
+        restart();
+      }
+    });
+
+    window.addEventListener('touchstart', () => {
+      if (!ninja.isJumping && !gameOver) {
+        ninja.vy = ninja.jumpPower;
+        ninja.isJumping = true;
+      } else if (gameOver) {
+        restart();
+      }
+    });
+
+    function restart() {
+      obstacles = [];
+      score = 0;
+      speed = 5;
+      ninja.y = canvas.height - 150;
+      ninja.vy = 0;
+      ninja.rotation = 0;
+      ninja.isJumping = false;
+      gameOver = false;
+      message.style.display = 'none';
+      update();
+    }
+
+    createStars();
+    update();
+  </script>
+</body>
+</html>
