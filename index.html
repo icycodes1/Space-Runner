@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Moon Ninja</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      overflow: hidden;
+      background: radial-gradient(ellipse at bottom, #0d1b2a, #000);
+      font-family: Arial, sans-serif;
+    }
+    canvas {
+      display: block;
+    }
+    #score {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      color: white;
+      font-size: 24px;
+      font-family: monospace;
+      text-shadow: 0 0 5px #fff;
+    }
+    #summer {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 20px;
+      font-family: monospace;
+      color: #fff;
+      text-shadow: 0 0 10px #ff0, 0 0 20px #ff0;
+      animation: glow 1.5s infinite alternate;
+    }
+    #creator {
+      position: absolute;
+      top: 40px;
+      left: 10px;
+      font-size: 14px;
+      color: #aaa;
+    }
+
+    @keyframes glow {
+      from {
+        text-shadow: 0 0 5px #ff0;
+      }
+      to {
+        text-shadow: 0 0 15px #ff0, 0 0 30px #ff0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas"></canvas>
+  <div id="summer">🌞 Happy Summer!</div>
+  <div id="creator">Created by Daniyal</div>
+  <div id="score">0</div>
+
+  <script>
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    let score = 0;
+    let speed = 6;
+    let obstacleGap = 400;
+
+    const stars = [];
+    for (let i = 0; i < 100; i++) {
+      stars.push({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        size: Math.random() * 2,
+        opacity: Math.random(),
+        flicker: Math.random() * 0.05
+      });
+    }
+
+    const ninja = {
+      x: 100,
+      y: canvas.height - 100,
+      size: 30,
+      velocityY: 0,
+      isJumping: false,
+      rotation: 0
+    };
+
+    const gravity = 0.6;
+    const jumpPower = 15;
+    let obstacles = [];
+
+    function createObstacle() {
+      const shapes = ["circle", "square", "triangle"];
+      const shape = shapes[Math.floor(Math.random() * shapes.length)];
+      obstacles.push({
+        x: canvas.width + Math.random() * 200,
+        y: canvas.height - 60,
+        size: 40 + Math.random() * 20,
+        rolling: score >= 500,
+        shape,
+        angle: 0
+      });
+    }
+
+    function drawStars() {
+      stars.forEach(star => {
+        star.opacity += star.flicker;
+        if (star.opacity <= 0 || star.opacity >= 1) star.flicker *= -1;
+        ctx.beginPath();
+        ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${star.opacity})`;
+        ctx.fill();
+      });
+    }
+
+    function drawNinja() {
+      ctx.save();
+      ctx.translate(ninja.x, ninja.y);
+      ctx.rotate(ninja.rotation);
+      ctx.strokeStyle = "#fff";
+      ctx.lineWidth = 4;
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "#fff";
+
+      // Head
+      ctx.beginPath();
+      ctx.arc(0, -20, 6, 0, Math.PI * 2);
+      ctx.stroke();
+
+      // Body
+      ctx.beginPath();
+      ctx.moveTo(0, -14);
+      ctx.lineTo(0, 10);
+      ctx.stroke();
+
+      // Arms
+      ctx.beginPath();
+      ctx.moveTo(-10, -5);
+      ctx.lineTo(10, -5);
+      ctx.stroke();
+
+      // Legs
+      ctx.beginPath();
+      ctx.moveTo(0, 10);
+      ctx.lineTo(-10, 25);
+      ctx.moveTo(0, 10);
+      ctx.lineTo(10, 25);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawObstacle(obstacle) {
+      ctx.save();
+      ctx.translate(obstacle.x, obstacle.y);
+      if (obstacle.rolling) {
+        obstacle.angle += 0.1;
+        ctx.rotate(obstacle.angle);
+      }
+
+      ctx.fillStyle = "yellow";
+      ctx.shadowBlur = 10;
+      ctx.shadowColor = "yellow";
+
+      switch (obstacle.shape) {
+        case "circle":
+          ctx.beginPath();
+          ctx.arc(0, 0, obstacle.size / 2, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+        case "square":
+          ctx.fillRect(-obstacle.size / 2, -obstacle.size / 2, obstacle.size, obstacle.size);
+          break;
+        case "triangle":
+          ctx.beginPath();
+          ctx.moveTo(0, -obstacle.size / 2);
+          ctx.lineTo(obstacle.size / 2, obstacle.size / 2);
+          ctx.lineTo(-obstacle.size / 2, obstacle.size / 2);
+          ctx.closePath();
+          ctx.fill();
+          break;
+      }
+
+      ctx.restore();
+    }
+
+    function detectCollision(obstacle) {
+      const dx = obstacle.x - ninja.x;
+      const dy = obstacle.y - ninja.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      return distance < (obstacle.size / 2 + ninja.size / 2);
+    }
+
+    function updateGame() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawStars();
+
+      // Update ninja
+      ninja.y += ninja.velocityY;
+      ninja.velocityY += gravity;
+      if (ninja.y > canvas.height - 100) {
+        ninja.y = canvas.height - 100;
+        ninja.velocityY = 0;
+        ninja.isJumping = false;
+        ninja.rotation = 0;
+      }
+
+      // Draw and update obstacles
+      for (let i = 0; i < obstacles.length; i++) {
+        const ob = obstacles[i];
+        ob.x -= speed;
+        drawObstacle(ob);
+        if (detectCollision(ob)) {
+          alert("Game Over!");
+          document.location.reload();
+          return;
+        }
+      }
+
+      // Remove off-screen obstacles
+      obstacles = obstacles.filter(ob => ob.x + ob.size > 0);
+
+      // Add new obstacles
+      if (obstacles.length === 0 || canvas.width - obstacles[obstacles.length - 1].x > obstacleGap + Math.random() * 200) {
+        createObstacle();
+      }
+
+      // Draw ninja
+      drawNinja();
+
+      // UFO appearance (optional feature you had)
+      if (score > 0 && score % 1000 === 0) {
+        ctx.fillStyle = "#0ff";
+        ctx.fillRect(canvas.width / 2 - 20, 100, 40, 20); // UFO
+        ctx.beginPath();
+        ctx.moveTo(canvas.width / 2, 120);
+        ctx.lineTo(canvas.width / 2, canvas.height - 100);
+        ctx.strokeStyle = "red";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+      }
+
+      // Increase score and difficulty
+      score++;
+      if (score % 500 === 0) {
+        speed += 0.15;
+      }
+
+      document.getElementById("score").textContent = score;
+
+      if (ninja.isJumping) {
+        ninja.rotation += 0.2;
+      }
+
+      requestAnimationFrame(updateGame);
+    }
+
+    document.addEventListener("keydown", () => {
+      if (!ninja.isJumping) {
+        ninja.velocityY = -jumpPower;
+        ninja.isJumping = true;
+      }
+    });
+
+    document.addEventListener("click", () => {
+      if (!ninja.isJumping) {
+        ninja.velocityY = -jumpPower;
+        ninja.isJumping = true;
+      }
+    });
+
+    updateGame();
+  </script>
+</body>
+</html>
+
